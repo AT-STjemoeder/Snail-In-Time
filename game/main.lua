@@ -5,9 +5,15 @@
     
     local player2 = {x = 200, y = 120, speed = 2, color = {1, 0.3, 0.3}}
     local player = {x = 200, y= 120,speed = 2, color ={0.3, 0.3, 1}}
+
     local gravity = 0.3
     local velocityY = 0
     local onGround = false
+
+    local surface = "ground"
+    local released = false
+    local climbspeed = 2
+    local fallButtonWasDown = false
 
     local objects = {
         {x = 50, y = 160, width = 100, height = 20},
@@ -72,6 +78,14 @@ function love.update(dt)
             p1dx = p1dx - 1
         end
 
+        local fallButtonDown = pad:isGamepadDown("dpdown")
+
+        if fallButtonDown and not fallButtonWasDown then
+            released = true
+            surface = "falling"
+        end
+
+        fallButtonWasDown = fallButtonDown
 
         if pad:isGamepadDown("a") then
             p2dx = p2dx + 1
@@ -79,33 +93,82 @@ function love.update(dt)
         if pad:isGamepadDown("y") then
             p2dx = p2dx - 1
         end
+ 
+        -- Horizontal movement
         player.x = player.x + (p1dx * player.speed)
-        
-        velocityY = velocityY + gravity
-       
-        player.y = player.y + velocityY
 
-        onGround = false
+        --checked of de slak op de grond zit of het plafon
+        local foundSurface = false
 
-        if player.y + 32 >= groundY then
-            player.y = groundY - 32
-            velocityY = 0
-            onGround = true
-        end
-
-        for i, object in ipairs(objects) do
-            if velocityY >= 0
-            and player.x + 20 > object.x
-            and player.x - 20 < object.x + object.width
-            and player.y + 32 >= object.y
-            and player.y + 32 - velocityY <= object.y then
-
-                player.y = object.y - 32
-                velocityY = 0
-                onGround = true
+        if surface == "ground" then
+            if player.y + 32 >= groundY then
+                player.y = groundY - 32
+                foundSurface = true
             end
         end
 
+        for i, object ipairs(objects) do
+
+            -- landen op bovenkant van een platform
+
+            if velocityY >= 0 
+            and player.x + 20 > object.x
+            and player.x - 20 < object.x + object.width
+            and player.y + 32 >= object.y
+            and player.y + 32 - velocityY <= object.groundY then
+
+                player.x = object.x - 20
+                surface = "wall"
+                foundSurface = true
+            end
+
+            --een muur aan de rechterkant detecteren
+
+            if p1dx > 0
+            and player.x + 20 >= object.x
+            and player.x + 20 - player.speed < object.x
+            and player.y + 20 > object.y
+            and player.y - 20 < object.y + object.height then
+
+                player.x = object.x - 20
+                surface = "wall"
+                foundSurface = true
+            end
+
+            -- een muur aan de rechterkant detecteren
+
+            if p1dx < 0
+            and player.x - 20 <= object.x + object.width
+            and player.x - 20 + player.speed > object.x + object.width
+            and player.y + 20 > object.y
+            and player.y - 20 < object.y + object.height then
+                
+                player.x = object.x + object.width + 20
+                surface = "wall"
+                foundSurface = true
+            end
+        end
+
+        -- fallen als er geen platform is of heeft laten vallen
+        
+        if surface == "wall" and not released then
+            player.y = player.y - climbspeed
+        end
+        
+        if not foundSurface or released then
+            surface = "falling"
+            velocityY = velocityY + gravity
+            player.y = player.y + velocityY
+        else
+            velocityY = 0 
+        end
+
+        if surface == "falling" and player.y + 32 >= groundY then
+            player.y = groundY - 32 
+            velocityY = 0
+            surface = "ground"
+            released = false
+        end
 
 
         player2.x = player2.x + (p2dx * player2.speed)
