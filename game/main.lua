@@ -1,4 +1,4 @@
-     local getJoysticks = love.joystick.getJoysticks
+    local getJoysticks = love.joystick.getJoysticks
     
     local graphics = love.graphics
     local circle = graphics.circle
@@ -8,18 +8,9 @@
 
     local gravity = 0.3
     local velocityY = 0
-    local onGround = false
 
     local surface = "ground"
-    local released = false
-    local climbspeed = 2
-    local fallButtonWasDown = false
-
-    local objects = {
-        {x = 50, y = 160, width = 100, height = 20},
-        {x = 200, y = 130, width = 80, height = 20},
-        {x = 300, y = 170, width = 60, height = 20} 
-    }
+    local wallSide = nil
 
     local groundY = 200
     
@@ -33,6 +24,10 @@
     local animationSpeed = 0.15
 
     local facing = 1
+
+    local rotation = 0
+
+    local debugMovement = 0
 
 function love.load()
 snail = graphics.newImage("snail_3ds_sprite_sheet_256.t3x")
@@ -68,24 +63,27 @@ function love.update(dt)
 
     if pad then
         local p1dx, p1dy = 0,0
+       
         local p2dx, p2dy = 0,0
+
+        if pad:isGamepadDown("dpup") then
+            p1dy = -1
+        end
+
+        if pad:isGamepadDown("dpdown") then
+            p1dy = 1
+        end
     
         if pad:isGamepadDown("dpright") then
             p1dx = p1dx + 1
+            
         end 
 
         if pad:isGamepadDown("dpleft") then
             p1dx = p1dx - 1
+            
         end
 
-        local fallButtonDown = pad:isGamepadDown("dpdown")
-
-        if fallButtonDown and not fallButtonWasDown then
-            released = true
-            surface = "falling"
-        end
-
-        fallButtonWasDown = fallButtonDown
 
         if pad:isGamepadDown("a") then
             p2dx = p2dx + 1
@@ -94,81 +92,7 @@ function love.update(dt)
             p2dx = p2dx - 1
         end
  
-        -- Horizontal movement
-        player.x = player.x + (p1dx * player.speed)
 
-        --checked of de slak op de grond zit of het plafon
-        local foundSurface = false
-
-        if surface == "ground" then
-            if player.y + 32 >= groundY then
-                player.y = groundY - 32
-                foundSurface = true
-            end
-        end
-
-        for i, object ipairs(objects) do
-
-            -- landen op bovenkant van een platform
-
-            if velocityY >= 0 
-            and player.x + 20 > object.x
-            and player.x - 20 < object.x + object.width
-            and player.y + 32 >= object.y
-            and player.y + 32 - velocityY <= object.groundY then
-
-                player.x = object.x - 20
-                surface = "wall"
-                foundSurface = true
-            end
-
-            --een muur aan de rechterkant detecteren
-
-            if p1dx > 0
-            and player.x + 20 >= object.x
-            and player.x + 20 - player.speed < object.x
-            and player.y + 20 > object.y
-            and player.y - 20 < object.y + object.height then
-
-                player.x = object.x - 20
-                surface = "wall"
-                foundSurface = true
-            end
-
-            -- een muur aan de rechterkant detecteren
-
-            if p1dx < 0
-            and player.x - 20 <= object.x + object.width
-            and player.x - 20 + player.speed > object.x + object.width
-            and player.y + 20 > object.y
-            and player.y - 20 < object.y + object.height then
-                
-                player.x = object.x + object.width + 20
-                surface = "wall"
-                foundSurface = true
-            end
-        end
-
-        -- fallen als er geen platform is of heeft laten vallen
-        
-        if surface == "wall" and not released then
-            player.y = player.y - climbspeed
-        end
-        
-        if not foundSurface or released then
-            surface = "falling"
-            velocityY = velocityY + gravity
-            player.y = player.y + velocityY
-        else
-            velocityY = 0 
-        end
-
-        if surface == "falling" and player.y + 32 >= groundY then
-            player.y = groundY - 32 
-            velocityY = 0
-            surface = "ground"
-            released = false
-        end
 
 
         player2.x = player2.x + (p2dx * player2.speed)
@@ -179,6 +103,83 @@ function love.update(dt)
         elseif p1dx < 0 then
             facing = -1
         end
+
+        -- TEST: detecteer de linker muur
+        if player.x <= 40 then
+            player.x = 40
+            surface = "wall"
+            wallSide = "left"
+        end
+
+-- TEST: detecteer de rechter muur
+        if player.x >= 360 then
+            player.x = 360
+            surface = "wall"
+            wallSide = "right"
+        end
+       -- Movement on ground
+        if surface == "ground" then
+
+            player.y = groundY - 32
+            player.x = player.x + (p1dx * player.speed)
+
+        elseif surface == "wall" then
+
+    -- D-pad down lets go
+            if pad:isGamepadDown("dpdown") then
+                surface = "falling"
+                wallSide = nil
+                velocityY = 0
+
+            elseif wallSide == "left" then
+
+                if p1dx < 0 then
+                    player.y = player.y - player.speed
+                elseif p1dx > 0 then
+                    player.y = player.y + player.speed
+                end
+
+            elseif wallSide == "right" then
+
+                if p1dx > 0 then
+                    player.y = player.y - player.speed
+                elseif p1dx < 0 then
+                    player.y = player.y + player.speed
+                end
+            end
+
+        elseif surface == "falling" then
+
+            player.x = player.x + (p1dx * player.speed)
+            velocityY = velocityY + gravity
+            player.y = player.y + velocityY
+        end
+
+-- Wall collision
+
+
+        -- Reach the ground from the wall
+        if surface == "wall" and player.y + 32 >= groundY then
+            player.y = groundY - 32
+            surface = "ground"
+            wallSide = nil
+            velocityY = 0
+        end
+
+        -- Land on ground while falling
+        if surface == "falling" and player.y + 32 >= groundY then
+            player.y = groundY - 32
+            velocityY = 0
+            surface = "ground"
+            wallSide = nil
+        end
+
+        -- Stop at the top of the screen
+        if player.y < 32 then
+            player.y = 32
+        end
+  
+
 
         if p1dx ~= 0 or p1dy ~= 0 then
             currentAnimation = "walk"
@@ -206,6 +207,12 @@ function love.update(dt)
 end
 function love.draw(screen)
     if screen ~= "bottom" then
+
+        graphics.setColor(1, 1, 1)
+        graphics.print("Surface: " .. surface, 10, 10)
+        graphics.print("Wall: " .. tostring(wallSide), 10, 30)
+        graphics.print("X: " .. player.x, 10, 50)
+        graphics.print("player x: " .. tostring(debugMovement), 10, 90)
         -- Draw the game on the upper screen
         graphics.setColor(1,1,1)
 
@@ -219,29 +226,32 @@ function love.draw(screen)
 
         graphics.setColor(0.5,0.5,0.5)
 
-        for i, object in ipairs(objects) do
-            graphics.rectangle(
-                "fill",
-                object.x,
-                object.y,
-                object.width,
-                object.height
-            )
-        end
+
 
         graphics.setColor(1,1,1)
+        local drawRotation = 0
+        local drawFacing = facing
+
+        if wallSide == "left" then
+            drawRotation = -math.pi / 2
+            drawFacing = -1
+        elseif wallSide == "right" then
+            drawRotation = math.pi / 2
+            drawFacing = 1
+        end
 
         graphics.draw(
             snail,
             frame,
             player.x,
             player.y,
-            0,
-            facing,
+            drawRotation,
+            drawFacing,
             1,
             32,
             32
         )
+        
         graphics.setColor(0.3, 0.8, 0.3)
         graphics.rectangle("fill",0, groundY, 400,40)
         graphics.setColor(1,1,1)
